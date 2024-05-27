@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simple Shooting Game</title>
+<style>
+    body, html {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background-color: black;
+    }
+    #game-container {
+        width: 100%;
+        height: 100%;
+        border: 1px solid black;
+        position: relative;
+    }
+    #player {
+        width: 100px;
+        height: 50px;
+        background-color: blue;
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        transition: left 0.1s ease-out;
+    }
+    #fire-button {
+        width: 60px;
+        height: 30px;
+        background-color: rgba(255, 255, 255, 0.5); /* 半透明 */
+        position: absolute;
+        bottom: 50%;
+        left: 10px;
+        transform: translateY(50%);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 14px;
+        color: white;
+        cursor: pointer;
+    }
+    .bullet {
+        width: 5px;
+        height: 10px;
+        background-color: red;
+        position: absolute;
+    }
+    .enemy {
+        width: 50px;
+        height: 50px;
+        background-color: red;
+        position: absolute;
+    }
+    .boss {
+        width: 100px;
+        height: 100px;
+        background-color: yellow;
+        position: absolute;
+    }
+    .explosion {
+        background-image: url('https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif');
+        background-size: contain;
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        background-repeat: no-repeat;
+    }
+    #score {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        font-size: 24px;
+        color: white;
+    }
+    #lives {
+        position: absolute;
+        top: 40px;
+        right: 10px;
+        font-size: 24px;
+        color: white;
+    }
+    #game-over {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        display: none;
+        color: white;
+    }
+</style>
+</head>
+<body>
+<div id="game-container">
+    <div id="player"></div>
+    <div id="fire-button" onclick="createBullet()">Fire</div>
+</div>
+<div id="score">Score: <span id="score-value">0</span></div>
+<div id="lives">Lives: <span id="lives-value">3</span></div>
+<div id="game-over">
+    <h1>Game Over</h1>
+    <p id="final-score">Your Score: <span id="final-score-value">0</span></p>
+    <button onclick="retry()">Retry</button>
+</div>
+<script>
+    const player = document.getElementById('player');
+    const gameContainer = document.getElementById('game-container');
+    const scoreElement = document.getElementById('score-value');
+    const livesElement = document.getElementById('lives-value');
+    const gameOverElement = document.getElementById('game-over');
+    const finalScoreElement = document.getElementById('final-score-value');
+
+    let bullets = [];
+    let enemies = [];
+    let boss = null;
+
+    let score = 0;
+    let lives = 3;
+    let gameOver = false;
+
+    let enemyCreationInterval = 2000;
+
+    function movePlayer(event) {
+        const x = event.clientX || event.touches[0].clientX; // マウスまたはタッチのx座標を取得
+        player.style.left = x - player.offsetWidth / 2 + 'px';
+    }
+
+    function createBullet() {
+        if (gameOver) return;
+        const bullet = document.createElement('div');
+        bullet.classList.add('bullet');
+        bullet.style.left = (parseInt(player.style.left) + player.offsetWidth / 2 - 2.5) + 'px';
+        bullet.style.bottom = '50px';
+        gameContainer.appendChild(bullet);
+        bullets.push(bullet);
+    }
+
+    function createEnemy() {
+        if (gameOver) return;
+        const enemy = document.createElement('div');
+        enemy.classList.add('enemy');
+        enemy.style.left = Math.random() * (gameContainer.offsetWidth - 50) + 'px';
+        enemy.style.top = '-50px';
+        gameContainer.appendChild(enemy);
+        enemies.push(enemy);
+    }
+
+    function createBoss() {
+        if (gameOver || boss !== null) return;
+        boss = document.createElement('div');
+        boss.classList.add('boss');
+        boss.style.left = (gameContainer.offsetWidth - 100) / 2 + 'px';
+        boss.style.top = '-100px';
+        gameContainer.appendChild(boss);
+    }
+
+    function moveBoss() {
+        if (gameOver || boss === null) return;
+        const left = parseInt(boss.style.left);
+        if (left <= 0 || left >= gameContainer.offsetWidth - 100) {
+            boss.direction = -boss.direction || -1;
+        }
+        boss.style.left = left + boss.direction * 5 + 'px';
+        if (Math.random() < 0.1) {
+            bossShoot();
+        }
+    }
+
+    function bossShoot() {
+        if (gameOver || boss === null) return;
+        const bullet = document.createElement('div');
+        bullet.classList.add('bullet');
+        bullet.style.left = (parseInt(boss.style.left) + boss.offsetWidth / 2 - 2.5) + 'px';
+        bullet.style.top = (parseInt(boss.style.top) + boss.offsetHeight) + 'px';
+        gameContainer.appendChild(bullet);
+        bullets.push(bullet);
+    }
+
+    function moveEnemies() {
+        if (gameOver || boss !== null) return;
+        enemies.forEach(enemy => {
+            const top = parseInt(enemy.style.top);
+            enemy.style.top = (top + 5) + 'px';
+
+            if (top > gameContainer.offsetHeight) {
+                enemy.remove();
+                enemies = enemies.filter(e => e !== enemy);
+                if (!gameOver) {
+                    lives--;
+                    livesElement.textContent = lives;
+                    if (lives <= 0) {
+                        endGame();
+                    }
+                }
+            }
+        });
+    }
+
+    function moveBullets() {
+        if (gameOver) return;
+        bullets.forEach(bullet => {
+            const bottom = parseInt(bullet.style.bottom);
+            bullet.style.bottom = (bottom + 30) + 'px';
+
+            if (bottom > gameContainer.offsetHeight) {
+                bullet.remove();
+                bullets = bullets.filter(b => b !== bullet);
+            } else {
+                enemies.forEach(enemy => {
+                    if (checkCollision(bullet, enemy)) {
+                        bullet.remove();
+                        enemy.remove();
+                        bullets = bullets.filter(b => b !== bullet);
+                        enemies = enemies.filter(e => e !== enemy);
+                        score += 10;
+                        scoreElement.textContent = score;
+                    }
+                });
+                if (boss !== null && checkCollision(bullet, boss)) {
+                    bullet.remove();
+                    boss.remove();
+                    bullets = bullets.filter(b => b !== bullet);
+                    boss = null;
+                    score += 1000;
+                    scoreElement.textContent = score;
+                    for (let i = 0; i < 5; i++) {
+                        createBullet();
+                    }
+                }
+            }
+        });
+    }
+
+    function checkCollision(bullet, enemy) {
+        const bulletRect = bullet.getBoundingClientRect();
+        const enemyRect = enemy.getBoundingClientRect();
+        return (
+            bulletRect.top <= enemyRect.bottom &&
+            bulletRect.right >= enemyRect.left &&
+            bulletRect.left <= enemyRect.right
+        );
+    }
+
+    function updatePlayer() {
+        player.style.opacity = 0.5;
+        setTimeout(() => {
+            player.style.opacity = 1;
+        }, 200);
+    }
+
+    function endGame() {
+        gameOver = true;
+        gameOverElement.style.display = 'block';
+        finalScoreElement.textContent = score;
+    }
+
+    function retry() {
+        location.reload();
+    }
+
+    document.addEventListener('touchmove', movePlayer); // タッチイベントに変更
+
+    const fireButton = document.getElementById('fire-button');
+    fireButton.addEventListener('touchstart', createBullet); // タッチイベントに変更
+
+    setInterval(createEnemy, enemyCreationInterval);
+    setInterval(createBoss, 30000);
+    setInterval(moveEnemies, 50);
+    setInterval(moveBullets, 50);
+    setInterval(moveBoss, 50);
+    setInterval(increaseEnemySpeed, 20000);
+
+    function increaseEnemySpeed() {
+        if (enemyCreationInterval > 200) {
+            enemyCreationInterval -= 200;
+        }
+    }
+</script>
+</body>
+</html>
